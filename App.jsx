@@ -564,10 +564,60 @@ setBulkUpdated(0);
 setLastUpdated(null);
 }
 
-// 全銘柄一括更新（Yahoo Finance v8 経由）
+// 1銘柄をYahoo Finance（CORSプロキシ経由）から取得
+async function fetchSingleQuote(ticker){
+const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
+const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+const res = await fetch(proxy);
+if(!res.ok) throw new Error(`HTTP ${res.status}`);
+const json = await res.json();
+const result = json?.chart?.result?.[0];
+if(!result) throw new Error(“No data”);
+const closes = result.indicators?.quote?.[0]?.closes || result.indicators?.quote?.[0]?.close;
+if(!closes || closes.length === 0) throw new Error(“No closes”);
+// 最新の有効な価格を取得
+let price = null;
+for(let i = closes.length-1; i >= 0; i–){
+if(closes[i] != null){ price = closes[i]; break; }
+}
+if(!price) throw new Error(“No valid price”);
+
+```
+// RSI(14)計算
+let rsi = null;
+const validCloses = closes.filter(c => c != null);
+if(validCloses.length >= 15){
+  let gains=0, losses=0;
+  for(let i=1; i<=14; i++){
+    const diff = validCloses[validCloses.length-14-1+i] - validCloses[validCloses.length-14-1+i-1];
+    if(diff>0) gains+=diff; else losses+=Math.abs(diff);
+  }
+  const avgG = gains/14, avgL = losses/14;
+  rsi = avgL===0 ? 100 : Math.round(100 - 100/(1+avgG/avgL));
+}
+
+// パフォーマンス計算
+const n = validCloses.length;
+const cur = validCloses[n-1];
+const perf1d  = n>=2  ? +((cur/validCloses[n-2]-1)*100).toFixed(2)  : 0;
+const perf10d = n>=11 ? +((cur/validCloses[n-11]-1)*100).toFixed(2) : 0;
+const perf1m  = n>=22 ? +((cur/validCloses[n-22]-1)*100).toFixed(2) : 0;
+const perf3m  = n>=66 ? +((cur/validCloses[n-66]-1)*100).toFixed(2) : 0;
+const perf6m  = n>=126? +((cur/validCloses[n-126]-1)*100).toFixed(2): 0;
+const perf1y  = n>=252? +((cur/validCloses[n-252]-1)*100).toFixed(2): 0;
+
+return {
+  p: +price.toFixed(2),
+  rsi,
+  perf: { "1d":perf1d, "10d":perf10d, "1m":perf1m, "3m":perf3m, "6m":perf6m, "1y":perf1y }
+};
+```
+
+}
+
+// 全銘柄一括更新
 async function runBulkUpdate(){
 const tickers = Object.keys(SM);
-const BATCH = 5; // 小バッチで安定性向上
 setBulkStatus(“running”);
 setBulkUpdated(0);
 setBulkLog([]);
@@ -575,43 +625,25 @@ const newOverride = {};
 let totalUpdated = 0;
 
 ```
-for(let i=0; i<tickers.length; i+=BATCH){
-  const batch = tickers.slice(i, i+BATCH);
-  setBulkProgress({done:i, total:tickers.length, current:batch.join(", ")});
+for(let i=0; i<tickers.length; i++){
+  const tk = tickers[i];
+  setBulkProgress({done:i, total:tickers.length, current:tk});
 
-  let success = false;
-  for(let attempt=0; attempt<2; attempt++){ // 最大2回リトライ
-    try{
-      const symbols = batch.join(",");
-      const res = await fetch(`/api/quote?symbols=${encodeURIComponent(symbols)}`);
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      let batchCount = 0;
-      for(const [tk, val] of Object.entries(data)){
-        if(SM[tk] && val.p && val.p > 0 && !val.error){
-          newOverride[tk] = {
-            p: val.p,
-            rsi: val.rsi || SM[tk].rsi,
-            perf: val.perf || SM[tk].perf,
-            v: val.v || SM[tk].v
-          };
-          totalUpdated++;
-          batchCount++;
-        }
-      }
-      setBulkLog(prev=>[...prev, `✅ ${batch.join(",")} — ${batchCount}件`]);
-      success = true;
-      break;
-    } catch(e){
-      if(attempt===1){
-        setBulkLog(prev=>[...prev, `❌ ${batch.join(",")} — ${e.message}`]);
-      }
-      await new Promise(r=>setTimeout(r,1000));
-    }
+  try{
+    const val = await fetchSingleQuote(tk);
+    newOverride[tk] = {
+      p: val.p,
+      rsi: val.rsi ?? SM[tk].rsi,
+      perf: val.perf,
+      v: SM[tk].v
+    };
+    totalUpdated++;
+    setBulkLog(prev=>[...prev, `✅ ${tk} $${val.p}`]);
+  } catch(e){
+    setBulkLog(prev=>[...prev, `❌ ${tk} — ${e.message}`]);
   }
   setBulkUpdated(totalUpdated);
-  await new Promise(r=>setTimeout(r,300)); // バースト防止
+  await new Promise(r=>setTimeout(r,200)); // レート制限対策
 }
 
 setSmOverride(newOverride);
