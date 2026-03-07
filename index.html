@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>US Theme Tracker</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#0f172a;
+color:white;
+padding:20px;
+}
+
+h1{
+text-align:center;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:20px;
+}
+
+.card{
+background:#1e293b;
+padding:20px;
+border-radius:14px;
+}
+
+.green{
+color:#22c55e;
+}
+
+.red{
+color:#ef4444;
+}
+
+#ranking{
+margin-bottom:40px;
+background:#1e293b;
+padding:20px;
+border-radius:12px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>🚀 US Theme Tracker</h1>
+
+<div id="ranking">
+<h2>🔥 Theme Ranking</h2>
+<div id="ranklist"></div>
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h2>AI</h2>
+<div id="AI"></div>
+</div>
+
+<div class="card">
+<h2>宇宙</h2>
+<div id="SPACE"></div>
+</div>
+
+<div class="card">
+<h2>量子</h2>
+<div id="QUANTUM"></div>
+</div>
+
+<div class="card">
+<h2>EV</h2>
+<div id="EV"></div>
+</div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
