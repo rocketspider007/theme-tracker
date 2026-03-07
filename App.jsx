@@ -564,47 +564,44 @@ setBulkUpdated(0);
 setLastUpdated(null);
 }
 
-// 1銘柄をYahoo Finance（CORSプロキシ経由）から取得
+const FINNHUB_KEY = “d6lpo19r01quej911dm0d6lpo19r01quej911dmg”;
+
+// 1銘柄をFinnhub APIから取得
 async function fetchSingleQuote(ticker){
-const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
-const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-const res = await fetch(proxy);
-if(!res.ok) throw new Error(`HTTP ${res.status}`);
-const json = await res.json();
-const result = json?.chart?.result?.[0];
-if(!result) throw new Error(“No data”);
-const closes = result.indicators?.quote?.[0]?.closes || result.indicators?.quote?.[0]?.close;
-if(!closes || closes.length === 0) throw new Error(“No closes”);
-// 最新の有効な価格を取得
-let price = null;
-for(let i = closes.length-1; i >= 0; i–){
-if(closes[i] != null){ price = closes[i]; break; }
-}
-if(!price) throw new Error(“No valid price”);
+const quoteRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`);
+if(!quoteRes.ok) throw new Error(`HTTP ${quoteRes.status}`);
+const quote = await quoteRes.json();
+if(!quote.c || quote.c === 0) throw new Error(“No price”);
+const price = quote.c;
+const perf1d = quote.pc > 0 ? +((price/quote.pc-1)*100).toFixed(2) : 0;
 
 ```
-// RSI(14)計算
+const to = Math.floor(Date.now()/1000);
+const from = to - 60*60*24*400;
+const candleRes = await fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+if(!candleRes.ok) throw new Error(`Candle HTTP ${candleRes.status}`);
+const candle = await candleRes.json();
+if(candle.s !== "ok" || !candle.c || candle.c.length === 0) throw new Error("No candle data");
+const closes = candle.c;
+const n = closes.length;
+
 let rsi = null;
-const validCloses = closes.filter(c => c != null);
-if(validCloses.length >= 15){
+if(n >= 15){
   let gains=0, losses=0;
-  for(let i=1; i<=14; i++){
-    const diff = validCloses[validCloses.length-14-1+i] - validCloses[validCloses.length-14-1+i-1];
+  for(let i=n-14; i<n; i++){
+    const diff = closes[i] - closes[i-1];
     if(diff>0) gains+=diff; else losses+=Math.abs(diff);
   }
   const avgG = gains/14, avgL = losses/14;
   rsi = avgL===0 ? 100 : Math.round(100 - 100/(1+avgG/avgL));
 }
 
-// パフォーマンス計算
-const n = validCloses.length;
-const cur = validCloses[n-1];
-const perf1d  = n>=2  ? +((cur/validCloses[n-2]-1)*100).toFixed(2)  : 0;
-const perf10d = n>=11 ? +((cur/validCloses[n-11]-1)*100).toFixed(2) : 0;
-const perf1m  = n>=22 ? +((cur/validCloses[n-22]-1)*100).toFixed(2) : 0;
-const perf3m  = n>=66 ? +((cur/validCloses[n-66]-1)*100).toFixed(2) : 0;
-const perf6m  = n>=126? +((cur/validCloses[n-126]-1)*100).toFixed(2): 0;
-const perf1y  = n>=252? +((cur/validCloses[n-252]-1)*100).toFixed(2): 0;
+const cur = closes[n-1];
+const perf10d = n>=11 ? +((cur/closes[n-11]-1)*100).toFixed(2) : 0;
+const perf1m  = n>=22 ? +((cur/closes[n-22]-1)*100).toFixed(2) : 0;
+const perf3m  = n>=66 ? +((cur/closes[n-66]-1)*100).toFixed(2) : 0;
+const perf6m  = n>=126? +((cur/closes[n-126]-1)*100).toFixed(2): 0;
+const perf1y  = n>=252? +((cur/closes[n-252]-1)*100).toFixed(2): 0;
 
 return {
   p: +price.toFixed(2),
@@ -615,7 +612,7 @@ return {
 
 }
 
-// 全銘柄一括更新
+// 全銘柄一括更新（Finnhub: 60req/分 → 1.1秒間隔）
 async function runBulkUpdate(){
 const tickers = Object.keys(SM);
 setBulkStatus(“running”);
@@ -628,22 +625,16 @@ let totalUpdated = 0;
 for(let i=0; i<tickers.length; i++){
   const tk = tickers[i];
   setBulkProgress({done:i, total:tickers.length, current:tk});
-
   try{
     const val = await fetchSingleQuote(tk);
-    newOverride[tk] = {
-      p: val.p,
-      rsi: val.rsi ?? SM[tk].rsi,
-      perf: val.perf,
-      v: SM[tk].v
-    };
+    newOverride[tk] = { p: val.p, rsi: val.rsi ?? SM[tk].rsi, perf: val.perf, v: SM[tk].v };
     totalUpdated++;
     setBulkLog(prev=>[...prev, `✅ ${tk} $${val.p}`]);
   } catch(e){
     setBulkLog(prev=>[...prev, `❌ ${tk} — ${e.message}`]);
   }
   setBulkUpdated(totalUpdated);
-  await new Promise(r=>setTimeout(r,200)); // レート制限対策
+  await new Promise(r=>setTimeout(r,1100));
 }
 
 setSmOverride(newOverride);
