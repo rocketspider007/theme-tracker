@@ -551,18 +551,40 @@ export default function App(){
   const FINNHUB_KEY = "d6lpo19r01quej911dm0d6lpo19r01quej911dmg";
 
   // 1銘柄をFinnhub APIから取得（現在値のみ・無料プラン対応）
-  async function fetchSingleQuote(ticker){
-    const quoteRes = await fetch(`/api/finnhub/quote?symbol=${ticker}&token=${FINNHUB_KEY}`);
-    if(!quoteRes.ok) throw new Error(`HTTP ${quoteRes.status}`);
-    const quote = await quoteRes.json();
-    if(!quote.c || quote.c === 0) throw new Error("No price");
-    const price = quote.c;
-    const perf1d = quote.pc > 0 ? +((price/quote.pc-1)*100).toFixed(2) : 0;
-    return {
-      p: +price.toFixed(2),
-      perf1d
-    };
+async function fetchSingleQuote(ticker){
+  const url = `/api/yahoo/v8/finance/chart/${ticker}?interval=1d&range=1y`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  const meta = json?.chart?.result?.[0]?.meta;
+  if(!meta || !meta.regularMarketPrice) throw new Error("No price");
+
+  const price = meta.regularMarketPrice;
+  const prev = meta.chartPreviousClose || meta.previousClose;
+  const perf1d = prev > 0 ? +((price/prev-1)*100).toFixed(2) : 0;
+
+  const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v=>v!=null) || [];
+  const n = closes.length;
+
+  function calcPerf(daysAgo){
+    if(n < daysAgo) return null;
+    const old = closes[n - daysAgo];
+    if(!old) return null;
+    return +((price/old-1)*100).toFixed(2);
   }
+
+  return {
+    p: +price.toFixed(2),
+    perf: {
+      "1d": perf1d,
+      "10d": calcPerf(10) ?? SM[ticker]?.perf?.["10d"],
+      "1m": calcPerf(21) ?? SM[ticker]?.perf?.["1m"],
+      "3m": calcPerf(63) ?? SM[ticker]?.perf?.["3m"],
+      "6m": calcPerf(126) ?? SM[ticker]?.perf?.["6m"],
+      "1y": calcPerf(252) ?? SM[ticker]?.perf?.["1y"],
+    }
+  };
+}
 
   // 全銘柄一括更新（Finnhub: 60req/分 → 1.1秒間隔）
   async function runBulkUpdate(){
