@@ -614,7 +614,7 @@ export default function App(){
       }
       return {...theme, perf: livePerf};
     });
-  },[SMx]);
+  },[SMx, smOverride]);
 
   const sorted=[...THEMES_LIVE].sort((a,b)=>
     thSort==="rise"?b.perf[perfPeriod]-a.perf[perfPeriod]:a.perf[perfPeriod]-b.perf[perfPeriod]
