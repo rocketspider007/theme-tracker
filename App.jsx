@@ -599,14 +599,13 @@ async function fetchSingleQuote(ticker){
       const tk = tickers[i];
       setBulkProgress({done:i, total:tickers.length, current:tk});
       try{
-        const val = await fetchSingleQuote(tk);
-        const existingPerf = SM[tk].perf || {};
-        newOverride[tk] = {
-          p: val.p,
-          rsi: SM[tk].rsi,
-          perf: { ...existingPerf, "1d": val.perf1d },
-          v: SM[tk].v
-        };
+       const val = await fetchSingleQuote(tk);
+newOverride[tk] = {
+  p: val.p,
+  rsi: SM[tk].rsi,
+  perf: val.perf,
+  v: SM[tk].v
+};
         totalUpdated++;
         setBulkLog(prev=>[...prev, `✅ ${tk} $${val.p}`]);
       } catch(e){
