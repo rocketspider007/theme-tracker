@@ -1,1 +1,9 @@
-{"buildCommand":"npm install && npm run build","rewrites":[{"source":"/api/finnhub/:path*","destination":"https://finnhub.io/api/v1/:path*"}]} 
+{
+  "buildCommand": "npm install && npm run build",
+  "rewrites": [
+    {
+      "source": "/api/finnhub/:path*",
+      "destination": "https://finnhub.io/api/v1/:path*"
+    }
+  ]
+}
