@@ -623,13 +623,16 @@ newOverride[tk] = {
   }
 
   // テーマのperfをSMx（更新済みデータ）から動的に計算
-  const THEMES_LIVE = useMemo(()=>{
+const THEMES_LIVE = useMemo(()=>{
     return THEMES.map(theme=>{
-      const tks = theme.stocks.filter(tk=>SMx[tk]);
+      const tks = theme.stocks.filter(tk=>SM[tk]);
       if(tks.length===0) return theme;
       const livePerf = {};
       for(const period of ["1y","6m","3m","1m","10d","1d"]){
-        const vals = tks.map(tk=>SMx[tk].perf?.[period]).filter(v=>v!=null);
+        const vals = tks.map(tk=>{
+          const ovr = smOverride[tk];
+          return ovr?.perf?.[period] ?? SM[tk].perf?.[period];
+        }).filter(v=>v!=null);
         if(vals.length>0) livePerf[period] = +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2);
         else livePerf[period] = theme.perf[period];
       }
