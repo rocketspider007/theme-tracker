@@ -635,7 +635,7 @@ newOverride[tk] = {
       }
       return {...theme, perf: livePerf};
     });
-  },[SMx, smOverride]);
+  },[smOverride]);
 
   const sorted=[...THEMES_LIVE].sort((a,b)=>
     thSort==="rise"?b.perf[perfPeriod]-a.perf[perfPeriod]:a.perf[perfPeriod]-b.perf[perfPeriod]
